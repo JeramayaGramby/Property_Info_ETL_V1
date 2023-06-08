@@ -14,9 +14,10 @@ from datetime import datetime
 # Use a logger within the function to post a successful api response to the log
 # Send all data to the person's email address
 # Wrap all this code in a try and except block
+pd.set_option('display.max_columns',None)
 
 class Individual_Property_Info_ETL_V1:
-    def __init__(self,street_address,city,state,zip_code,api_key,parsed_property_data,):
+    def __init__(self,street_address,city,state,zip_code,api_key,parsed_property_data):
         self.street_address = street_address
         self.city = city
         self.state = state
@@ -48,9 +49,16 @@ class Individual_Property_Info_ETL_V1:
         # owner, deeds, boundary
         # The address needs to be the unique identifier appended to the 
         estated_api_response = response.json()
-        parsed_property_data = pd.json_normalize(data=estated_api_response['data'])
+        
+        # These two lines are unnecessary
+        parsed_property_data = pd.json_normalize(data=estated_api_response['data']).assign(
+            index=2
+        )
         
         # Acquiring data surrounding all the deeds issued to the property owner
+        
+        # If the data comes out weird, change this to parsed_property_data instead
+        # of parsed_address_data
         address_data = estated_api_response['data']['address']
         parsed_address_data = pd.DataFrame(data=address_data)
 
@@ -79,17 +87,18 @@ class Individual_Property_Info_ETL_V1:
         parsed_valuation_data = pd.DataFrame(data=valuation_data)
 
         dataframe_list=[parsed_address_data,parsed_boundary_data,parsed_deeds_data,parsed_parcel_data,
-                        parsed_valuation_data,parsed_tax_assessment_data]
+                        parsed_valuation_data,parsed_tax_assessment_data,parsed_structure_data]
         
         for dataframe in dataframe_list:
             if dataframe.empty:
+                logging.error(msg=f'{dataframe} is an empty dataframe. Please check API credentials')
                 print(f'The Estated API returned empty data. Please check your credentials')
                 return False
     
             if pd.Series(dataframe['uri']).is_unique:
                 print(f'Primary key check succeeded')
             else: 
-                logging.error()
+                logging.error(msg=f'Duplicate primary keys were found inside {dataframe}')
                 raise Exception(f'Duplicate primary keys were found inside dataframe. Check Estated API')
 
         # Turning all data into Excel files that can be sent to the email address
@@ -114,7 +123,7 @@ class Individual_Property_Info_ETL_V1:
     def property_data_loader(self, property_data_extractor):
         email_address = config('EMAIL_ADDRESS')
         subject = f'{self.street_address} Total Data'
-        contents = 
+        text=""
         with open(database, 'r') as attachment:
             yag.send(to=[email_address],
             subject=subject,
